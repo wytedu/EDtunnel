@@ -1,27 +1,42 @@
+// EDtunnel - A Cloudflare Worker-based VLESS Proxy with WebSocket Transport
 // @ts-ignore
 import { connect } from 'cloudflare:sockets';
 
-// How to generate your own UUID:
-// [Windows] Press "Win + R", input cmd and run:  Powershell -NoExit -Command "[guid]::NewGuid()"
+// ======================================
+// Configuration
+// ======================================
+
+/**
+ * User configuration and settings
+ * Generate UUID: [Windows] Press "Win + R", input cmd and run: Powershell -NoExit -Command "[guid]::NewGuid()"
+ */
 let userID = 'd342d11e-d424-4583-b36e-524ab1f0afa4';
 
+/**
+ * Array of proxy server addresses with ports
+ * Format: ['hostname:port', 'hostname:port']
+ */
 const proxyIPs = ['cdn.xn--b6gac.eu.org:443', 'cdn-all.xn--b6gac.eu.org:443'];
 
-// if you want to use ipv6 or single proxyIP, please add comment at this line and remove comment at the next line
+// Randomly select a proxy server from the pool
 let proxyIP = proxyIPs[Math.floor(Math.random() * proxyIPs.length)];
-// how to make sure the proxyIP with port is valid?
-// go to https://proxyip.edtunnel.best/ , input your proxyIP:proxyPort, and click "Check" button
-// if the port is valid, value "Proxy IP" is true, otherwise false and the value "Origin" must be 443
 let proxyPort = proxyIP.includes(':') ? proxyIP.split(':')[1] : '443';
 
-// use single proxyip instead of random
-// let proxyIP = 'cdn.xn--b6gac.eu.org';
-// ipv6 proxyIP example remove comment to use
-// let proxyIP = "[2a01:4f8:c2c:123f:64:5:6810:c55a]"
+// Alternative configurations:
+// Single proxy IP: let proxyIP = 'cdn.xn--b6gac.eu.org';
+// IPv6 example: let proxyIP = "[2a01:4f8:c2c:123f:64:5:6810:c55a]"
 
-// Example:  user:pass@host:port  or  host:port
+/**
+ * SOCKS5 proxy configuration
+ * Format: 'username:password@host:port' or 'host:port'
+ */
 let socks5Address = '';
-// socks5Relay is true, will proxy all traffic to socks5Address, otherwise socks5Address only be used for cloudflare ips
+
+/**
+ * SOCKS5 relay mode
+ * When true: All traffic is proxied through SOCKS5
+ * When false: Only Cloudflare IPs use SOCKS5
+ */
 let socks5Relay = false;
 
 if (!isValidUUID(userID)) {
@@ -31,7 +46,16 @@ if (!isValidUUID(userID)) {
 let parsedSocks5Address = {};
 let enableSocks = false;
 
-
+/**
+ * Main handler for the Cloudflare Worker. Processes incoming requests and routes them appropriately.
+ * @param {import("@cloudflare/workers-types").Request} request - The incoming request object
+ * @param {Object} env - Environment variables containing configuration
+ * @param {string} env.UUID - User ID for authentication
+ * @param {string} env.PROXYIP - Proxy server IP address
+ * @param {string} env.SOCKS5 - SOCKS5 proxy configuration
+ * @param {string} env.SOCKS5_RELAY - SOCKS5 relay mode flag
+ * @returns {Promise<Response>} Response object
+ */
 export default {
 	/**
 	 * @param {import("@cloudflare/workers-types").Request} request
@@ -46,7 +70,11 @@ export default {
 			socks5Address = SOCKS5 || socks5Address;
 			socks5Relay = SOCKS5_RELAY || socks5Relay;
 			if (PROXYIP) {
-				[proxyIP, proxyPort = '443'] = PROXYIP.split(':');
+				// Split PROXYIP into an array of proxy addresses
+				const proxyAddresses = PROXYIP.split(',').map(addr => addr.trim());
+				// Randomly select one proxy address
+				const selectedProxy = proxyAddresses[Math.floor(Math.random() * proxyAddresses.length)];
+				[proxyIP, proxyPort = '443'] = selectedProxy.split(':');
 			} else {
 				proxyPort = proxyIP.includes(':') ? proxyIP.split(':')[1] : '443';
 				proxyIP = proxyIP.split(':')[0];
@@ -55,7 +83,11 @@ export default {
 			console.log('ProxyPort:', proxyPort);
 			if (socks5Address) {
 				try {
-					parsedSocks5Address = socks5AddressParser(socks5Address);
+					// Split SOCKS5 into an array of addresses
+					const socks5Addresses = socks5Address.split(',').map(addr => addr.trim());
+					// Randomly select one SOCKS5 address
+					const selectedSocks5 = socks5Addresses[Math.floor(Math.random() * socks5Addresses.length)];
+					parsedSocks5Address = socks5AddressParser(selectedSocks5);
 					enableSocks = true;
 				} catch (err) {
 					console.log(err.toString());
@@ -98,36 +130,265 @@ export default {
 	},
 };
 
+/**
+ * Handles default path requests when no specific route matches.
+ * Generates and returns a cloud drive interface HTML page.
+ * @param {URL} url - The URL object of the request
+ * @param {Request} request - The incoming request object
+ * @returns {Response} HTML response with cloud drive interface
+ */
 async function handleDefaultPath(url, request) {
-	const randomHostname = hostnames[Math.floor(Math.random() * hostnames.length)];
-	const newHeaders = new Headers(request.headers);
-	newHeaders.set('cf-connecting-ip', '1.2.3.4');
-	newHeaders.set('x-forwarded-for', '1.2.3.4');
-	newHeaders.set('x-real-ip', '1.2.3.4');
-	newHeaders.set('referer', 'https://www.google.com/search?q=edtunnel');
+	const host = request.headers.get('Host');
+	const DrivePage = `
+	  <!DOCTYPE html>
+	  <html lang="en">
+	  <head>
+		  <meta charset="UTF-8">
+		  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+		  <title>${host} - Cloud Drive</title>
+		  <style>
+			  body {
+				  font-family: Arial, sans-serif;
+				  line-height: 1.6;
+				  margin: 0;
+				  padding: 20px;
+				  background-color: #f4f4f4;
+			  }
+			  .container {
+				  max-width: 800px;
+				  margin: auto;
+				  background: white;
+				  padding: 20px;
+				  border-radius: 5px;
+				  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+			  }
+			  h1 {
+				  color: #333;
+			  }
+			  .file-list {
+				  list-style-type: none;
+				  padding: 0;
+			  }
+			  .file-list li {
+				  background: #f9f9f9;
+				  margin-bottom: 10px;
+				  padding: 10px;
+				  border-radius: 3px;
+				  display: flex;
+				  align-items: center;
+			  }
+			  .file-list li:hover {
+				  background: #f0f0f0;
+			  }
+			  .file-icon {
+				  margin-right: 10px;
+				  font-size: 1.2em;
+			  }
+			  .file-link {
+				  text-decoration: none;
+				  color: #0066cc;
+				  flex-grow: 1;
+			  }
+			  .file-link:hover {
+				  text-decoration: underline;
+			  }
+			  .upload-area {
+				  margin-top: 20px;
+				  padding: 40px;
+				  background: #e9e9e9;
+				  border: 2px dashed #aaa;
+				  border-radius: 5px;
+				  text-align: center;
+				  cursor: pointer;
+				  transition: all 0.3s ease;
+			  }
+			  .upload-area:hover, .upload-area.drag-over {
+				  background: #d9d9d9;
+				  border-color: #666;
+			  }
+			  .upload-area h2 {
+				  margin-top: 0;
+				  color: #333;
+			  }
+			  #fileInput {
+				  display: none;
+			  }
+			  .upload-icon {
+				  font-size: 48px;
+				  color: #666;
+				  margin-bottom: 10px;
+			  }
+			  .upload-text {
+				  font-size: 18px;
+				  color: #666;
+			  }
+			  .upload-status {
+				  margin-top: 20px;
+				  font-style: italic;
+				  color: #666;
+			  }
+			  .file-actions {
+				  display: flex;
+				  gap: 10px;
+			  }
+			  .delete-btn {
+				  color: #ff4444;
+				  cursor: pointer;
+				  background: none;
+				  border: none;
+				  padding: 5px;
+			  }
+			  .delete-btn:hover {
+				  color: #ff0000;
+			  }
+			  .clear-all-btn {
+				  background-color: #ff4444;
+				  color: white;
+				  border: none;
+				  padding: 10px 15px;
+				  border-radius: 4px;
+				  cursor: pointer;
+				  margin-bottom: 20px;
+			  }
+			  .clear-all-btn:hover {
+				  background-color: #ff0000;
+			  }
+		  </style>
+	  </head>
+	  <body>
+		  <div class="container">
+			  <h1>Cloud Drive</h1>
+			  <p>Welcome to your personal cloud storage. Here are your uploaded files:</p>
+			  <button id="clearAllBtn" class="clear-all-btn">Clear All Files</button>
+			  <ul id="fileList" class="file-list">
+			  </ul>
+			  <div id="uploadArea" class="upload-area">
+				  <div class="upload-icon">📁</div>
+				  <h2>Upload a File</h2>
+				  <p class="upload-text">Drag and drop a file here or click to select</p>
+				  <input type="file" id="fileInput" hidden>
+			  </div>
+			  <div id="uploadStatus" class="upload-status"></div>
+		  </div>
+		  <script>
+			  function loadFileList() {
+				  const fileList = document.getElementById('fileList');
+				  const savedFiles = JSON.parse(localStorage.getItem('uploadedFiles')) || [];
+				  fileList.innerHTML = '';
+				  savedFiles.forEach((file, index) => {
+					  const li = document.createElement('li');
+					  li.innerHTML = \`
+						  <span class="file-icon">📄</span>
+						  <a href="https://ipfs.io/ipfs/\${file.Url.split('/').pop()}" class="file-link" target="_blank">\${file.Name}</a>
+						  <div class="file-actions">
+							  <button class="delete-btn" onclick="deleteFile(\${index})">
+								  <span class="file-icon">❌</span>
+							  </button>
+						  </div>
+					  \`;
+					  fileList.appendChild(li);
+				  });
+			  }
 
-	const proxyUrl = 'https://' + randomHostname + url.pathname + url.search;
-	const modifiedRequest = new Request(proxyUrl, {
-		method: request.method,
-		headers: newHeaders,
-		body: request.body,
-		redirect: 'manual',
+			  function deleteFile(index) {
+				  const savedFiles = JSON.parse(localStorage.getItem('uploadedFiles')) || [];
+				  savedFiles.splice(index, 1);
+				  localStorage.setItem('uploadedFiles', JSON.stringify(savedFiles));
+				  loadFileList();
+			  }
+
+			  document.getElementById('clearAllBtn').addEventListener('click', () => {
+				  if (confirm('Are you sure you want to clear all files?')) {
+					  localStorage.removeItem('uploadedFiles');
+					  loadFileList();
+				  }
+			  });
+
+			  loadFileList();
+
+			  const uploadArea = document.getElementById('uploadArea');
+			  const fileInput = document.getElementById('fileInput');
+			  const uploadStatus = document.getElementById('uploadStatus');
+
+			  uploadArea.addEventListener('dragover', (e) => {
+				  e.preventDefault();
+				  uploadArea.classList.add('drag-over');
+			  });
+
+			  uploadArea.addEventListener('dragleave', () => {
+				  uploadArea.classList.remove('drag-over');
+			  });
+
+			  uploadArea.addEventListener('drop', (e) => {
+				  e.preventDefault();
+				  uploadArea.classList.remove('drag-over');
+				  const files = e.dataTransfer.files;
+				  if (files.length) {
+					  handleFileUpload(files[0]);
+				  }
+			  });
+
+			  uploadArea.addEventListener('click', () => {
+				  fileInput.click();
+			  });
+
+			  fileInput.addEventListener('change', (e) => {
+				  const file = e.target.files[0];
+				  if (file) {
+					  handleFileUpload(file);
+				  }
+			  });
+
+			  async function handleFileUpload(file) {
+				  uploadStatus.textContent = \`Uploading: \${file.name}...\`;
+				  
+				  const formData = new FormData();
+				  formData.append('file', file);
+
+				  try {
+					  const response = await fetch('https://app.img2ipfs.org/api/v0/add', {
+						  method: 'POST',
+						  body: formData,
+						  headers: {
+							  'Accept': 'application/json',
+						  },
+					  });
+
+					  if (!response.ok) {
+						  throw new Error('Upload failed');
+					  }
+
+					  const result = await response.json();
+					  uploadStatus.textContent = \`File uploaded successfully! IPFS Hash: \${result.Hash}\`;
+					  
+					  const savedFiles = JSON.parse(localStorage.getItem('uploadedFiles')) || [];
+					  savedFiles.push(result);
+					  localStorage.setItem('uploadedFiles', JSON.stringify(savedFiles));
+					  
+					  loadFileList();
+					  
+				  } catch (error) {
+					  console.error('Error:', error);
+					  uploadStatus.textContent = 'Upload failed. Please try again.';
+				  }
+			  }
+		  </script>
+	  </body>
+	  </html>
+	`;
+
+	// 返回伪装的网盘页面
+	return new Response(DrivePage, {
+		headers: {
+			"content-type": "text/html;charset=UTF-8",
+		},
 	});
-
-	const proxyResponse = await fetch(modifiedRequest, { redirect: 'manual' });
-	if ([301, 302].includes(proxyResponse.status)) {
-		return new Response(`Redirects to ${randomHostname} are not allowed.`, {
-			status: 403,
-			statusText: 'Forbidden',
-		});
-	}
-	return proxyResponse;
 }
 
 /**
  * Handles protocol over WebSocket requests by creating a WebSocket pair, accepting the WebSocket connection, and processing the protocol header.
- * @param {import("@cloudflare/workers-types").Request} request The incoming request object.
- * @returns {Promise<Response>} A Promise that resolves to a WebSocket response object.
+ * @param {import("@cloudflare/workers-types").Request} request - The incoming request object
+ * @returns {Promise<Response>} WebSocket response
  */
 async function ProtocolOverWSHandler(request) {
 
@@ -145,7 +406,7 @@ async function ProtocolOverWSHandler(request) {
 	};
 	const earlyDataHeader = request.headers.get('sec-websocket-protocol') || '';
 
-	const readableWebSocketStream = makeReadableWebSocketStream(webSocket, earlyDataHeader, log);
+	const readableWebSocketStream = MakeReadableWebSocketStream(webSocket, earlyDataHeader, log);
 
 	/** @type {{ value: import("@cloudflare/workers-types").Socket | null}}*/
 	let remoteSocketWapper = {
@@ -175,7 +436,7 @@ async function ProtocolOverWSHandler(request) {
 				rawDataIndex,
 				ProtocolVersion = new Uint8Array([0, 0]),
 				isUDP,
-			} = processProtocolHeader(chunk, userID);
+			} = ProcessProtocolHeader(chunk, userID);
 			address = addressRemote;
 			portWithRandomLog = `${portRemote}--${Math.random()} ${isUDP ? 'udp ' : 'tcp '
 				} `;
@@ -199,7 +460,7 @@ async function ProtocolOverWSHandler(request) {
 			if (isDns) {
 				return handleDNSQuery(rawClientData, webSocket, ProtocolResponseHeader, log);
 			}
-			handleTCPOutBound(remoteSocketWapper, addressType, addressRemote, portRemote, rawClientData, webSocket, ProtocolResponseHeader, log);
+			HandleTCPOutBound(remoteSocketWapper, addressType, addressRemote, portRemote, rawClientData, webSocket, ProtocolResponseHeader, log);
 		},
 		close() {
 			log(`readableWebSocketStream is close`);
@@ -218,76 +479,19 @@ async function ProtocolOverWSHandler(request) {
 	});
 }
 
-async function trojanOverWSHandler(request) {
-	const webSocketPair = new WebSocketPair();
-	const [client, webSocket] = Object.values(webSocketPair);
-	webSocket.accept();
-	let address = "";
-	let portWithRandomLog = "";
-	const log = (info, event) => {
-		console.log(`[${address}:${portWithRandomLog}] ${info}`, event || "");
-	};
-	const earlyDataHeader = request.headers.get("sec-websocket-protocol") || "";
-	const readableWebSocketStream = makeReadableWebSocketStream(webSocket, earlyDataHeader, log);
-	let remoteSocketWapper = {
-		value: null
-	};
-	let udpStreamWrite = null;
-	readableWebSocketStream.pipeTo(new WritableStream({
-		async write(chunk, controller) {
-			if (udpStreamWrite) {
-				return udpStreamWrite(chunk);
-			}
-			if (remoteSocketWapper.value) {
-				const writer = remoteSocketWapper.value.writable.getWriter();
-				await writer.write(chunk);
-				writer.releaseLock();
-				return;
-			}
-			const {
-				hasError,
-				message,
-				portRemote = 443,
-				addressRemote = "",
-				rawClientData,
-				addressType
-			} = await parseTrojanHeader(chunk);
-			address = addressRemote;
-			portWithRandomLog = `${portRemote}--${Math.random()} tcp`;
-			if (hasError) {
-				throw new Error(message);
-			}
-			handleTCPOutBound(remoteSocketWapper, addressRemote, portRemote, rawClientData, webSocket, log, addressType);
-		},
-		close() {
-			log(`readableWebSocketStream is closed`);
-		},
-		abort(reason) {
-			log(`readableWebSocketStream is aborted`, JSON.stringify(reason));
-		}
-	})).catch((err) => {
-		log("readableWebSocketStream pipeTo error", err);
-	});
-	return new Response(null, {
-		status: 101,
-		// @ts-ignore
-		webSocket: client
-	});
-}
-
 /**
- * Handles outbound TCP connections.
- *
- * @param {any} remoteSocket 
- * @param {string} addressRemote The remote address to connect to.
- * @param {number} portRemote The remote port to connect to.
- * @param {Uint8Array} rawClientData The raw client data to write.
- * @param {import("@cloudflare/workers-types").WebSocket} webSocket The WebSocket to pass the remote socket to.
- * @param {Uint8Array} protocolResponseHeader The protocol response header.
- * @param {function} log The logging function.
- * @returns {Promise<void>} The remote socket.
+ * Handles outbound TCP connections for the proxy.
+ * Establishes connection to remote server and manages data flow.
+ * @param {Socket} remoteSocket - Socket for remote connection
+ * @param {string} addressType - Type of address (IPv4/IPv6)
+ * @param {string} addressRemote - Remote server address
+ * @param {number} portRemote - Remote server port
+ * @param {Uint8Array} rawClientData - Raw data from client
+ * @param {WebSocket} webSocket - WebSocket connection
+ * @param {Uint8Array} ProtocolResponseHeader - Protocol response header
+ * @param {Function} log - Logging function
  */
-async function handleTCPOutBound(remoteSocket, addressType, addressRemote, portRemote, rawClientData, webSocket, ProtocolResponseHeader, log,) {
+async function HandleTCPOutBound(remoteSocket, addressType, addressRemote, portRemote, rawClientData, webSocket, ProtocolResponseHeader, log,) {
 	async function connectAndWrite(address, port, socks = false) {
 		/** @type {import("@cloudflare/workers-types").Socket} */
 		let tcpSocket;
@@ -313,7 +517,7 @@ async function handleTCPOutBound(remoteSocket, addressType, addressRemote, portR
 		if (enableSocks) {
 			tcpSocket = await connectAndWrite(addressRemote, portRemote, true);
 		} else {
-			tcpSocket = await connectAndWrite(proxyIP || addressRemote, proxyPort || portRemote);
+			tcpSocket = await connectAndWrite(proxyIP || addressRemote, proxyPort || portRemote, false);
 		}
 		// no matter retry success or not, close websocket
 		tcpSocket.closed.catch(error => {
@@ -321,24 +525,25 @@ async function handleTCPOutBound(remoteSocket, addressType, addressRemote, portR
 		}).finally(() => {
 			safeCloseWebSocket(webSocket);
 		})
-		remoteSocketToWS(tcpSocket, webSocket, ProtocolResponseHeader, null, log);
+		RemoteSocketToWS(tcpSocket, webSocket, ProtocolResponseHeader, null, log);
 	}
 
 	let tcpSocket = await connectAndWrite(addressRemote, portRemote);
 
 	// when remoteSocket is ready, pass to websocket
 	// remote--> ws
-	remoteSocketToWS(tcpSocket, webSocket, ProtocolResponseHeader, retry, log);
+	RemoteSocketToWS(tcpSocket, webSocket, ProtocolResponseHeader, retry, log);
 }
 
 /**
- * Creates a readable stream from a WebSocket server, allowing for data to be read from the WebSocket.
- * @param {import("@cloudflare/workers-types").WebSocket} webSocketServer The WebSocket server to create the readable stream from.
- * @param {string} earlyDataHeader The header containing early data for WebSocket 0-RTT.
- * @param {(info: string)=> void} log The logging function.
- * @returns {ReadableStream} A readable stream that can be used to read data from the WebSocket.
+ * Creates a readable stream from WebSocket server.
+ * Handles early data and WebSocket messages.
+ * @param {WebSocket} webSocketServer - WebSocket server instance
+ * @param {string} earlyDataHeader - Header for early data (0-RTT)
+ * @param {Function} log - Logging function
+ * @returns {ReadableStream} Stream of WebSocket data
  */
-function makeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
+function MakeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
 	let readableStreamCancel = false;
 	const stream = new ReadableStream({
 		start(controller) {
@@ -379,25 +584,14 @@ function makeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
 	return stream;
 }
 
-// https://xtls.github.io/development/protocols/protocol.html
-// https://github.com/zizifn/excalidraw-backup/blob/main/v2ray-protocol.excalidraw
-
 /**
- * Processes the protocol header buffer and returns an object with the relevant information.
- * @param {ArrayBuffer} protocolBuffer The protocol header buffer to process.
- * @param {string} userID The user ID to validate against the UUID in the protocol header.
- * @returns {{
- *  hasError: boolean,
- *  message?: string,
- *  addressRemote?: string,
- *  addressType?: number,
- *  portRemote?: number,
- *  rawDataIndex?: number,
- *  protocolVersion?: Uint8Array,
- *  isUDP?: boolean
- * }} An object with the relevant information extracted from the protocol header buffer.
+ * Processes VLESS protocol header.
+ * Extracts and validates protocol information from buffer.
+ * @param {ArrayBuffer} protocolBuffer - Buffer containing protocol header
+ * @param {string} userID - User ID for validation
+ * @returns {Object} Processed header information
  */
-function processProtocolHeader(protocolBuffer, userID) {
+function ProcessProtocolHeader(protocolBuffer, userID) {
 	if (protocolBuffer.byteLength < 24) {
 		return { hasError: true, message: 'invalid data' };
 	}
@@ -463,17 +657,16 @@ function processProtocolHeader(protocolBuffer, userID) {
 	};
 }
 
-
 /**
- * Converts a remote socket to a WebSocket connection.
- * @param {import("@cloudflare/workers-types").Socket} remoteSocket The remote socket to convert.
- * @param {import("@cloudflare/workers-types").WebSocket} webSocket The WebSocket to connect to.
- * @param {ArrayBuffer | null} protocolResponseHeader The protocol response header.
- * @param {(() => Promise<void>) | null} retry The function to retry the connection if it fails.
- * @param {(info: string) => void} log The logging function.
- * @returns {Promise<void>} A Promise that resolves when the conversion is complete.
+ * Converts remote socket connection to WebSocket.
+ * Handles data transfer between socket and WebSocket.
+ * @param {Socket} remoteSocket - Remote socket connection
+ * @param {WebSocket} webSocket - WebSocket connection
+ * @param {ArrayBuffer} protocolResponseHeader - Protocol response header
+ * @param {Function} retry - Retry function for failed connections
+ * @param {Function} log - Logging function
  */
-async function remoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader, retry, log) {
+async function RemoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader, retry, log) {
 	let hasIncomingData = false;
 
 	try {
@@ -502,7 +695,7 @@ async function remoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader,
 			})
 		);
 	} catch (error) {
-		console.error(`remoteSocketToWS error:`, error.stack || error);
+		console.error(`RemoteSocketToWS error:`, error.stack || error);
 		safeCloseWebSocket(webSocket);
 	}
 
@@ -511,10 +704,11 @@ async function remoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader,
 		await retry();
 	}
 }
+
 /**
- * Decodes a base64 string into an ArrayBuffer.
- * @param {string} base64Str The base64 string to decode.
- * @returns {{earlyData: ArrayBuffer|null, error: Error|null}} An object containing the decoded ArrayBuffer or null if there was an error, and any error that occurred during decoding or null if there was no error.
+ * Converts base64 string to ArrayBuffer.
+ * @param {string} base64Str - Base64 encoded string
+ * @returns {Object} Object containing decoded data or error
  */
 function base64ToArrayBuffer(base64Str) {
 	if (!base64Str) {
@@ -538,9 +732,9 @@ function base64ToArrayBuffer(base64Str) {
 }
 
 /**
- * Checks if a given string is a valid UUID.
- * @param {string} uuid The string to validate as a UUID.
- * @returns {boolean} True if the string is a valid UUID, false otherwise.
+ * Validates UUID format.
+ * @param {string} uuid - UUID string to validate
+ * @returns {boolean} True if valid UUID
  */
 function isValidUUID(uuid) {
 	// More precise UUID regex pattern
@@ -552,8 +746,9 @@ const WS_READY_STATE_OPEN = 1;
 const WS_READY_STATE_CLOSING = 2;
 
 /**
- * Closes a WebSocket connection safely without throwing exceptions.
- * @param {import("@cloudflare/workers-types").WebSocket} socket The WebSocket connection to close.
+ * Safely closes WebSocket connection.
+ * Prevents exceptions during WebSocket closure.
+ * @param {WebSocket} socket - WebSocket to close
  */
 function safeCloseWebSocket(socket) {
 	try {
@@ -567,6 +762,12 @@ function safeCloseWebSocket(socket) {
 
 const byteToHex = Array.from({ length: 256 }, (_, i) => (i + 0x100).toString(16).slice(1));
 
+/**
+ * Converts byte array to hex string without validation.
+ * @param {Uint8Array} arr - Byte array to convert
+ * @param {number} offset - Starting offset
+ * @returns {string} Hex string
+ */
 function unsafeStringify(arr, offset = 0) {
 	return [
 		byteToHex[arr[offset]],
@@ -592,6 +793,12 @@ function unsafeStringify(arr, offset = 0) {
 	].join('').toLowerCase();
 }
 
+/**
+ * Safely converts byte array to hex string with validation.
+ * @param {Uint8Array} arr - Byte array to convert
+ * @param {number} offset - Starting offset
+ * @returns {string} Hex string
+ */
 function stringify(arr, offset = 0) {
 	const uuid = unsafeStringify(arr, offset);
 	if (!isValidUUID(uuid)) {
@@ -600,86 +807,13 @@ function stringify(arr, offset = 0) {
 	return uuid;
 }
 
-
 /**
- * Handles outbound UDP traffic by transforming the data into DNS queries and sending them over a WebSocket connection.
- * @param {import("@cloudflare/workers-types").WebSocket} webSocket The WebSocket connection to send the DNS queries over.
- * @param {ArrayBuffer} protocolResponseHeader The protocol response header.
- * @param {(string) => void} log The logging function.
- * @returns {{write: (chunk: Uint8Array) => void}} An object with a write method that accepts a Uint8Array chunk to write to the transform stream.
- */
-async function handleUDPOutBound(webSocket, protocolResponseHeader, log) {
-
-	let isprotocolHeaderSent = false;
-	const transformStream = new TransformStream({
-		start(_controller) {
-
-		},
-		transform(chunk, controller) {
-			// udp message 2 byte is the the length of udp data
-			// TODO: this should have bug, beacsue maybe udp chunk can be in two websocket message
-			for (let index = 0; index < chunk.byteLength;) {
-				const lengthBuffer = chunk.slice(index, index + 2);
-				const udpPakcetLength = new DataView(lengthBuffer).getUint16(0);
-				const udpData = new Uint8Array(
-					chunk.slice(index + 2, index + 2 + udpPakcetLength)
-				);
-				index = index + 2 + udpPakcetLength;
-				controller.enqueue(udpData);
-			}
-		},
-		flush(_controller) {
-		}
-	});
-
-	// only handle dns udp for now
-	transformStream.readable.pipeTo(new WritableStream({
-		async write(chunk) {
-			const resp = await fetch(dohURL, // dns server url
-				{
-					method: 'POST',
-					headers: {
-						'content-type': 'application/dns-message',
-					},
-					body: chunk,
-				})
-			const dnsQueryResult = await resp.arrayBuffer();
-			const udpSize = dnsQueryResult.byteLength;
-			// console.log([...new Uint8Array(dnsQueryResult)].map((x) => x.toString(16)));
-			const udpSizeBuffer = new Uint8Array([(udpSize >> 8) & 0xff, udpSize & 0xff]);
-			if (webSocket.readyState === WS_READY_STATE_OPEN) {
-				log(`doh success and dns message length is ${udpSize}`);
-				if (isprotocolHeaderSent) {
-					webSocket.send(await new Blob([udpSizeBuffer, dnsQueryResult]).arrayBuffer());
-				} else {
-					webSocket.send(await new Blob([protocolResponseHeader, udpSizeBuffer, dnsQueryResult]).arrayBuffer());
-					isprotocolHeaderSent = true;
-				}
-			}
-		}
-	})).catch((error) => {
-		log('dns udp has error' + error)
-	});
-
-	const writer = transformStream.writable.getWriter();
-
-	return {
-		/**
-		 * 
-		 * @param {Uint8Array} chunk 
-		 */
-		write(chunk) {
-			writer.write(chunk);
-		}
-	};
-}
-
-/**
- * 
- * @param {ArrayBuffer} udpChunk 
- * @param {import("@cloudflare/workers-types").WebSocket} webSocket 
- * @param {ArrayBuffer} protocolResponseHeader 
- * @param {(string)=> void} log 
+ * Handles DNS query through UDP.
+ * Processes DNS requests and forwards them.
+ * @param {ArrayBuffer} udpChunk - UDP data chunk
+ * @param {WebSocket} webSocket - WebSocket connection
+ * @param {ArrayBuffer} protocolResponseHeader - Protocol response header
+ * @param {Function} log - Logging function
  */
 async function handleDNSQuery(udpChunk, webSocket, protocolResponseHeader, log) {
 	// no matter which DNS server client send, we alwasy use hard code one.
@@ -724,13 +858,13 @@ async function handleDNSQuery(udpChunk, webSocket, protocolResponseHeader, log) 
 	}
 }
 
-
 /**
- * 
- * @param {number} addressType
- * @param {string} addressRemote
- * @param {number} portRemote
- * @param {function} log The logging function.
+ * Establishes SOCKS5 proxy connection.
+ * @param {number} addressType - Type of address
+ * @param {string} addressRemote - Remote address
+ * @param {number} portRemote - Remote port
+ * @param {Function} log - Logging function
+ * @returns {Promise<Socket>} Connected socket
  */
 async function socks5Connect(addressType, addressRemote, portRemote, log) {
 	const { username, password, hostname, port } = parsedSocks5Address;
@@ -865,8 +999,9 @@ async function socks5Connect(addressType, addressRemote, portRemote, log) {
 }
 
 /**
- * 
- * @param {string} address
+ * Parses SOCKS5 address string.
+ * @param {string} address - SOCKS5 address string
+ * @returns {Object} Parsed address information
  */
 function socks5AddressParser(address) {
 	let [latter, former] = address.split("@").reverse();
@@ -896,244 +1031,15 @@ function socks5AddressParser(address) {
 	}
 }
 
-
-async function parseTrojanHeader(buffer) {
-	if (buffer.byteLength < 58) {
-		return { hasError: true, message: "Invalid data length" };
-	}
-
-	const view = new DataView(buffer);
-	if (view.getUint8(56) !== 0x0d || view.getUint8(57) !== 0x0a) {
-		return { hasError: true, message: "Invalid header format (missing CR LF)" };
-	}
-
-	const password = new TextDecoder().decode(buffer.slice(0, 56));
-	if (password !== Sha256.sha224(userID)) {
-		return { hasError: true, message: "Invalid password" };
-	}
-
-	const socks5Data = new DataView(buffer, 58);
-	if (socks5Data.byteLength < 6) {
-		return { hasError: true, message: "Invalid SOCKS5 request data" };
-	}
-
-	if (socks5Data.getUint8(0) !== 1) {
-		return { hasError: true, message: "Unsupported command, only TCP (CONNECT) is allowed" };
-	}
-
-	const atype = socks5Data.getUint8(1);
-	let address;
-	let addressEnd;
-
-	switch (atype) {
-		case 1: // IPv4
-			address = Array.from(new Uint8Array(socks5Data.buffer, socks5Data.byteOffset + 2, 4)).join('.');
-			addressEnd = 6;
-			break;
-		case 3: // Domain name
-			const domainLength = socks5Data.getUint8(2);
-			address = new TextDecoder().decode(socks5Data.buffer.slice(socks5Data.byteOffset + 3, socks5Data.byteOffset + 3 + domainLength));
-			addressEnd = 3 + domainLength;
-			break;
-		case 4: // IPv6
-			address = Array.from(new Uint8Array(socks5Data.buffer, socks5Data.byteOffset + 2, 16))
-				.map(x => x.toString(16).padStart(2, '0'))
-				.join(':')
-				.replace(/(:0)+:/, '::');
-			addressEnd = 18;
-			break;
-		default:
-			return { hasError: true, message: `Invalid address type: ${atype}` };
-	}
-
-	const port = socks5Data.getUint16(addressEnd);
-
-	return {
-		hasError: false,
-		address,
-		port,
-		data: buffer.slice(58 + addressEnd + 2)
-	};
-}
-
-
-const VlessCmd = {
-	TCP: 1,
-	UDP: 2,
-	MUX: 3,
-};
-
-const VlessAddrType = {
-	IPv4: 1,		// 4-bytes
-	DomainName: 2,	// The first byte indicates the length of the following domain name
-	IPv6: 3,		// 16-bytes
-};
-
-/**
- * Generate a vless request header.
- * @param {number} command - The command to execute (see VlessCmd).
- * @param {number} destType - The type of destination address (see VlessAddrType).
- * @param {string} destAddr - The destination address.
- * @param {number} destPort - The destination port.
- * @param {string} uuid - The UUID of the request.
- * @returns {Uint8Array} - The vless request header as a Uint8Array.
- * @throws {Error} - If the address type is unknown.
- */
-function makeVlessReqHeader(command, destType, destAddr, destPort, uuid) {
-	/** @type {number} */
-	let addressFieldLength;
-	/** @type {Uint8Array | undefined} */
-	let addressEncoded;
-	switch (destType) {
-		case VlessAddrType.IPv4:
-			addressFieldLength = 4;
-			break;
-		case VlessAddrType.DomainName:
-			addressEncoded = new TextEncoder().encode(destAddr);
-			addressFieldLength = addressEncoded.length + 1;
-			break;
-		case VlessAddrType.IPv6:
-			addressFieldLength = 16;
-			break;
-		default:
-			throw new Error(`Unknown address type: ${destType}`);
-	}
-
-	const uuidString = uuid.replace(/-/g, '');
-	const uuidOffset = 1;
-	const vlessHeader = new Uint8Array(22 + addressFieldLength);
-
-	// Protocol Version = 0
-	vlessHeader[0] = 0x00;
-
-	for (let i = 0; i < uuidString.length; i += 2) {
-		vlessHeader[uuidOffset + i / 2] = parseInt(uuidString.substr(i, 2), 16);
-	}
-
-	// Additional Information Length M = 0
-	vlessHeader[17] = 0x00;
-
-	// Instruction
-	vlessHeader[18] = command;
-
-	// Port, 2-byte big-endian
-	vlessHeader[19] = destPort >> 8;
-	vlessHeader[20] = destPort & 0xFF;
-
-	// Address Type
-	// 1--> ipv4  addressLength =4
-	// 2--> domain name addressLength=addressBuffer[1]
-	// 3--> ipv6  addressLength =16
-	vlessHeader[21] = destType;
-
-	// Address
-	switch (destType) {
-		case VlessAddrType.IPv4:
-			const octetsIPv4 = destAddr.split('.');
-			for (let i = 0; i < 4; i++) {
-				vlessHeader[22 + i] = parseInt(octetsIPv4[i]);
-			}
-			break;
-		case VlessAddrType.DomainName:
-			vlessHeader[22] = addressEncoded.length;
-			vlessHeader.set(addressEncoded, 23);
-			break;
-		case VlessAddrType.IPv6:
-			const groupsIPv6 = ipv6.split(':');
-			for (let i = 0; i < 8; i++) {
-				const hexGroup = parseInt(groupsIPv6[i], 16);
-				vlessHeader[i * 2 + 22] = hexGroup >> 8;
-				vlessHeader[i * 2 + 23] = hexGroup & 0xFF;
-			}
-			break;
-		default:
-			throw new Error(`Unknown address type: ${destType}`);
-	}
-
-	return vlessHeader;
-}
-
-/**
- * Checks if the provided VLESS configuration is valid for the given address and stream settings.
- * @param {string} address - The address to check against.
- * @param {Object} streamSettings - The stream settings to check.
- * @throws {Error} If the outbound stream method is not 'ws'.
- * @throws {Error} If the security layer is not 'none' or 'tls'.
- * @throws {Error} If the Host field in the http header is different from the server address.
- * @throws {Error} If the SNI is different from the server address.
- */
-function checkVlessConfig(address, streamSettings) {
-	if (streamSettings.network !== 'ws') {
-		throw new Error(`Unsupported outbound stream method: ${streamSettings.network}, has to be ws (Websocket)`);
-	}
-
-	if (streamSettings.security !== 'tls' && streamSettings.security !== 'none') {
-		throw new Error(`Usupported security layer: ${streamSettings.network}, has to be none or tls.`);
-	}
-
-	if (streamSettings.wsSettings && streamSettings.wsSettings.headers && streamSettings.wsSettings.headers.Host !== address) {
-		throw new Error(`The Host field in the http header is different from the server address, this is unsupported due to Cloudflare API restrictions`);
-	}
-
-	if (streamSettings.tlsSettings && streamSettings.tlsSettings.serverName !== address) {
-		throw new Error(`The SNI is different from the server address, this is unsupported due to Cloudflare API restrictions`);
-	}
-}
-
-
-/**
- * Parses a VLESS URL string into its components.
- * @param {string} url The VLESS URL string in the format "vless://uuid@remoteHost:remotePort?queryParams#descriptiveText".
- * @returns {{
-*  protocol: string,
-*  uuid: string,
-*  remoteHost: string,
-*  remotePort: number,
-*  descriptiveText: string,
-*  queryParams: Object<string, string>
-* }} An object containing the parsed components of the VLESS URL string.
-* @throws {Error} If the URL string is in an invalid format.
-*/
-function parseVlessString(url) {
-	const regex = /^(.+):\/\/(.+?)@(.+?):(\d+)(\?[^#]*)?(#.*)?$/;
-	const match = url.match(regex);
-
-	if (!match) {
-		throw new Error('Invalid URL format');
-	}
-
-	const [, protocol, uuid, remoteHost, remotePort, query, descriptiveText] = match;
-
-	const json = {
-		protocol,
-		uuid,
-		remoteHost,
-		remotePort: parseInt(remotePort),
-		descriptiveText: descriptiveText ? descriptiveText.substring(1) : '',
-		queryParams: {}
-	};
-
-	if (query) {
-		const queryFields = query.substring(1).split('&');
-		queryFields.forEach(field => {
-			const [key, value] = field.split('=');
-			json.queryParams[key] = value;
-		});
-	}
-
-	return json;
-}
-
-
 const at = 'QA==';
 const pt = 'dmxlc3M=';
 const ed = 'RUR0dW5uZWw=';
 
 /**
- *
- * @param {string} userID - single or comma separated userIDs
- * @param {string | null} hostName
- * @returns {string}
+ * Generates configuration for VLESS client.
+ * @param {string} userIDs - Single or comma-separated user IDs
+ * @param {string} hostName - Host name for configuration
+ * @returns {string} Configuration HTML
  */
 function getConfig(userIDs, hostName) {
 	const commonUrlPart = `?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2048#${hostName}`;
@@ -1353,6 +1259,12 @@ function getConfig(userIDs, hostName) {
 const HttpPort = new Set([80, 8080, 8880, 2052, 2086, 2095, 2082]);
 const HttpsPort = new Set([443, 8443, 2053, 2096, 2087, 2083]);
 
+/**
+ * Generates subscription content.
+ * @param {string} userID_path - User ID path
+ * @param {string} hostname - Host name
+ * @returns {string} Subscription content
+ */
 function GenSub(userID_path, hostname) {
 	const userIDArray = userID_path.includes(',') ? userID_path.split(',') : [userID_path];
 	const randomPath = () => '/' + Math.random().toString(36).substring(2, 15) + '?ed=2048';
@@ -1386,80 +1298,3 @@ function GenSub(userID_path, hostname) {
 
 	return result.join('\n');
 }
-
-const hostnames = [
-	'weibo.com',                // Weibo - A popular social media platform
-	'www.baidu.com',            // Baidu - The largest search engine in China
-	'www.qq.com',               // QQ - A widely used instant messaging platform
-	'www.taobao.com',           // Taobao - An e-commerce website owned by Alibaba Group
-	'www.jd.com',               // JD.com - One of the largest online retailers in China
-	'www.sina.com.cn',          // Sina - A Chinese online media company
-	'www.sohu.com',             // Sohu - A Chinese internet service provider
-	'www.tmall.com',            // Tmall - An online retail platform owned by Alibaba Group
-	'www.163.com',              // NetEase Mail - One of the major email providers in China
-	'www.zhihu.com',            // Zhihu - A popular question-and-answer website
-	'www.youku.com',            // Youku - A Chinese video sharing platform
-	'www.xinhuanet.com',        // Xinhua News Agency - Official news agency of China
-	'www.douban.com',           // Douban - A Chinese social networking service
-	'www.meituan.com',          // Meituan - A Chinese group buying website for local services
-	'www.toutiao.com',          // Toutiao - A news and information content platform
-	'www.ifeng.com',            // iFeng - A popular news website in China
-	'www.autohome.com.cn',      // Autohome - A leading Chinese automobile online platform
-	'www.360.cn',               // 360 - A Chinese internet security company
-	'www.douyin.com',           // Douyin - A Chinese short video platform
-	'www.kuaidi100.com',        // Kuaidi100 - A Chinese express delivery tracking service
-	'www.wechat.com',           // WeChat - A popular messaging and social media app
-	'www.csdn.net',             // CSDN - A Chinese technology community website
-	'www.imgo.tv',              // ImgoTV - A Chinese live streaming platform
-	'www.aliyun.com',           // Alibaba Cloud - A Chinese cloud computing company
-	'www.eyny.com',             // Eyny - A Chinese multimedia resource-sharing website
-	'www.mgtv.com',             // MGTV - A Chinese online video platform
-	'www.xunlei.com',           // Xunlei - A Chinese download manager and torrent client
-	'www.hao123.com',           // Hao123 - A Chinese web directory service
-	'www.bilibili.com',         // Bilibili - A Chinese video sharing and streaming platform
-	'www.youth.cn',             // Youth.cn - A China Youth Daily news portal
-	'www.hupu.com',             // Hupu - A Chinese sports community and forum
-	'www.youzu.com',            // Youzu Interactive - A Chinese game developer and publisher
-	'www.panda.tv',             // Panda TV - A Chinese live streaming platform
-	'www.tudou.com',            // Tudou - A Chinese video-sharing website
-	'www.zol.com.cn',           // ZOL - A Chinese electronics and gadgets website
-	'www.toutiao.io',           // Toutiao - A news and information app
-	'www.tiktok.com',           // TikTok - A Chinese short-form video app
-	'www.netease.com',          // NetEase - A Chinese internet technology company
-	'www.cnki.net',             // CNKI - China National Knowledge Infrastructure, an information aggregator
-	'www.zhibo8.cc',            // Zhibo8 - A website providing live sports streams
-	'www.zhangzishi.cc',        // Zhangzishi - Personal website of Zhang Zishi, a public intellectual in China
-	'www.xueqiu.com',           // Xueqiu - A Chinese online social platform for investors and traders
-	'www.qqgongyi.com',         // QQ Gongyi - Tencent's charitable foundation platform
-	'www.ximalaya.com',         // Ximalaya - A Chinese online audio platform
-	'www.dianping.com',         // Dianping - A Chinese online platform for finding and reviewing local businesses
-	'www.suning.com',           // Suning - A leading Chinese online retailer
-	'www.zhaopin.com',          // Zhaopin - A Chinese job recruitment platform
-	'www.jianshu.com',          // Jianshu - A Chinese online writing platform
-	'www.mafengwo.cn',          // Mafengwo - A Chinese travel information sharing platform
-	'www.51cto.com',            // 51CTO - A Chinese IT technical community website
-	'www.qidian.com',           // Qidian - A Chinese web novel platform
-	'www.ctrip.com',            // Ctrip - A Chinese travel services provider
-	'www.pconline.com.cn',      // PConline - A Chinese technology news and review website
-	'www.cnzz.com',             // CNZZ - A Chinese web analytics service provider
-	'www.telegraph.co.uk',      // The Telegraph - A British newspaper website	
-	'www.ynet.com',             // Ynet - A Chinese news portal
-	'www.ted.com',              // TED - A platform for ideas worth spreading
-	'www.renren.com',           // Renren - A Chinese social networking service
-	'www.pptv.com',             // PPTV - A Chinese online video streaming platform
-	'www.liepin.com',           // Liepin - A Chinese online recruitment website
-	'www.881903.com',           // 881903 - A Hong Kong radio station website
-	'www.aipai.com',            // Aipai - A Chinese online video sharing platform
-	'www.ttpaihang.com',        // Ttpaihang - A Chinese celebrity popularity ranking website
-	'www.quyaoya.com',          // Quyaoya - A Chinese online ticketing platform
-	'www.91.com',               // 91.com - A Chinese software download website
-	'www.dianyou.cn',           // Dianyou - A Chinese game information website
-	'www.tmtpost.com',          // TMTPost - A Chinese technology media platform
-	'www.douban.com',           // Douban - A Chinese social networking service
-	'www.guancha.cn',           // Guancha - A Chinese news and commentary website
-	'www.so.com',               // So.com - A Chinese search engine
-	'www.58.com',               // 58.com - A Chinese classified advertising website
-	'www.cnblogs.com',          // Cnblogs - A Chinese technology blog community
-	'www.cntv.cn',              // CCTV - China Central Television official website
-	'www.secoo.com',            // Secoo - A Chinese luxury e-commerce platform
-];
