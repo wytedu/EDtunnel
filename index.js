@@ -16,7 +16,7 @@ let userID = 'd342d11e-d424-4583-b36e-524ab1f0afa4';
  * Array of proxy server addresses with ports
  * Format: ['hostname:port', 'hostname:port']
  */
-const proxyIPs = ['143.198.213.197:443'];
+const proxyIPs = ['cdn.xn--b6gac.eu.org:443', 'cdn-all.xn--b6gac.eu.org:443'];
 
 // Randomly select a proxy server from the pool
 let proxyIP = proxyIPs[Math.floor(Math.random() * proxyIPs.length)];
@@ -1311,7 +1311,7 @@ function GenSub(userID_path, hostname, proxyIP) {
 		'www.whatismyip.com',
 		'www.ipget.net',
 		// 高频率更新
-		'speed.marisalnc.com',           // 1000ip/3min
+		// 'speed.marisalnc.com',           // 1000ip/3min
 		'freeyx.cloudflare88.eu.org',    // 1000ip/3min
 		'cloudflare.182682.xyz',         // 15ip/15min
 		// '115155.xyz',                    // 18ip/1小时
@@ -1322,7 +1322,7 @@ function GenSub(userID_path, hostname, proxyIP) {
 		'cf.0sm.com',                    // 手动更新
 		'cloudflare-ip.mofashi.ltd',     // 未知频率
 		'cf.090227.xyz',                 // 未知频率
-		'cname.xirancdn.us',             // 未知频率
+		// 'cname.xirancdn.us',             // 未知频率
 		// 'f3058171cad.002404.xyz',        // 未知频率
 		'cf.zhetengsha.eu.org',          // 未知频率
 		'cloudflare.9jy.cc',             // 未知频率
