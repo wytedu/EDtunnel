@@ -586,3 +586,4 @@ const WS_READY_STATE_CLOSING = 2;
 /**
  * Closes a WebSocket connection safely without throwing exceptions.
  * @param {import("@cloudflare/workers-types").WebSocket} s
+*/
